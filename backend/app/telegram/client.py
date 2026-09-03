@@ -15,8 +15,7 @@ def send_message(text: str, chat_id: str | None = None) -> bool:
             row = conn.execute("SELECT value FROM app_settings WHERE key='telegram_chat_id'").fetchone()
             target = row["value"] if row else None
     if not token or not target:
-        print("NO_REPLY")
-        return False
+        raise RuntimeError("Telegram delivery is not configured: TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID are required")
     response = requests.post(
         f"https://api.telegram.org/bot{token}/sendMessage",
         json={"chat_id": target, "text": text},
