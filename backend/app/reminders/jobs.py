@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.config import load_config
+from app.config import configured_users, load_config
 from app.database import connect, init_db
 from app.nutrition.coach import today
 from app.telegram.client import send_message
@@ -14,24 +14,24 @@ MESSAGES = {
 }
 
 
-def meal_logged(conn, meal: str, date_text: str) -> bool:
+def meal_logged(conn, meal: str, date_text: str, user_id: int) -> bool:
     row = conn.execute(
-        "SELECT 1 FROM meal_logs WHERE user_id=1 AND meal_type=? AND date(timestamp)=? LIMIT 1",
-        (meal, date_text),
+        "SELECT 1 FROM meal_logs WHERE user_id=? AND meal_type=? AND date(timestamp)=? LIMIT 1",
+        (user_id, meal, date_text),
     ).fetchone()
     return row is not None
 
 
-def check_meal(meal: str, level: int) -> str:
+def check_meal(meal: str, level: int, user_id: int = 1) -> str:
     init_db()
     date_text = today()
     with connect() as conn:
-        if meal_logged(conn, meal, date_text):
+        if meal_logged(conn, meal, date_text, user_id):
             print("NO_REPLY")
             return "NO_REPLY"
         state = conn.execute(
-            "SELECT status FROM reminder_state WHERE user_id=1 AND reminder_date=? AND meal_type=?",
-            (date_text, meal),
+            "SELECT status FROM reminder_state WHERE user_id=? AND reminder_date=? AND meal_type=?",
+            (user_id, date_text, meal),
         ).fetchone()
         if state and state["status"] in {"skipped", "done"}:
             print("NO_REPLY")
@@ -39,11 +39,11 @@ def check_meal(meal: str, level: int) -> str:
         conn.execute(
             """
             INSERT INTO reminder_state (user_id, reminder_date, meal_type, level, status)
-            VALUES (1, ?, ?, ?, 'pending')
+            VALUES (?, ?, ?, ?, 'pending')
             ON CONFLICT(user_id, reminder_date, meal_type)
             DO UPDATE SET level=excluded.level, updated_at=CURRENT_TIMESTAMP
             """,
-            (date_text, meal, level),
+            (user_id, date_text, meal, level),
         )
     text = MESSAGES.get(level, MESSAGES[3]).format(meal=meal)
     sent = send_message(text)
@@ -54,31 +54,37 @@ def check_meal(meal: str, level: int) -> str:
 
 def install_manifest() -> list[dict]:
     cfg = load_config()
-    jobs = [
-        {
-            "name": "nutrition-morning-plan",
-            "schedule": cfg["schedule"]["morning_plan"],
-            "command": "curl -fsS \"http://nutrition-jobs:8080/morning-plan?send=1&token=${NUTRITION_JOB_TOKEN}\"",
-        },
-        {
-            "name": "nutrition-evening-scorecard",
-            "schedule": cfg["schedule"]["evening_scorecard"],
-            "command": "curl -fsS \"http://nutrition-jobs:8080/scorecard?send=1&token=${NUTRITION_JOB_TOKEN}\"",
-        },
-        {
-            "name": "nutrition-weekly-summary",
-            "schedule": cfg["schedule"]["weekly_summary"],
-            "command": "curl -fsS \"http://nutrition-jobs:8080/weekly?send=1&token=${NUTRITION_JOB_TOKEN}\"",
-        },
-    ]
-    for meal, spec in cfg["meal_windows"].items():
-        for idx, when in enumerate(spec["reminders"], start=1):
-            minute, hour = when.split(":")[1], when.split(":")[0]
-            jobs.append(
+    jobs = []
+    for user in configured_users(cfg):
+        user_id = int(user.get("id", 1))
+        slug = str(user.get("name", f"user-{user_id}")).strip().lower().replace(" ", "-")
+        jobs.extend(
+            [
                 {
-                    "name": f"nutrition-{meal}-reminder-{idx}",
-                    "schedule": f"{int(minute)} {int(hour)} * * *",
-                    "command": f"curl -fsS \"http://nutrition-jobs:8080/check-meal?meal={meal}&level={idx}&token=${{NUTRITION_JOB_TOKEN}}\"",
-                }
-            )
+                    "name": f"nutrition-{slug}-morning-plan",
+                    "schedule": cfg["schedule"]["morning_plan"],
+                    "command": f"curl -fsS \"http://nutrition-jobs:8080/morning-plan?user_id={user_id}&send=1&token=${{NUTRITION_JOB_TOKEN}}\"",
+                },
+                {
+                    "name": f"nutrition-{slug}-evening-scorecard",
+                    "schedule": cfg["schedule"]["evening_scorecard"],
+                    "command": f"curl -fsS \"http://nutrition-jobs:8080/scorecard?user_id={user_id}&send=1&token=${{NUTRITION_JOB_TOKEN}}\"",
+                },
+                {
+                    "name": f"nutrition-{slug}-weekly-summary",
+                    "schedule": cfg["schedule"]["weekly_summary"],
+                    "command": f"curl -fsS \"http://nutrition-jobs:8080/weekly?user_id={user_id}&send=1&token=${{NUTRITION_JOB_TOKEN}}\"",
+                },
+            ]
+        )
+        for meal, spec in cfg["meal_windows"].items():
+            for idx, when in enumerate(spec["reminders"], start=1):
+                minute, hour = when.split(":")[1], when.split(":")[0]
+                jobs.append(
+                    {
+                        "name": f"nutrition-{slug}-{meal}-reminder-{idx}",
+                        "schedule": f"{int(minute)} {int(hour)} * * *",
+                        "command": f"curl -fsS \"http://nutrition-jobs:8080/check-meal?user_id={user_id}&meal={meal}&level={idx}&token=${{NUTRITION_JOB_TOKEN}}\"",
+                    }
+                )
     return jobs

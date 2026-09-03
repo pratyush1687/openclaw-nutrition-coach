@@ -4,14 +4,14 @@ import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
-from app.config import env
+from app.config import default_targets, env, load_config
 from app.database import connect, init_db
 from app.nutrition.coach import current_targets, morning_plan, scorecard, today, totals_for_date, weekly_summary
 from app.reminders.jobs import check_meal
 from app.telegram.client import send_message
 
 
-def resolve_user_id(conn, payload: dict | None = None, query: dict[str, list[str]] | None = None) -> int:
+def find_user_id(conn, payload: dict | None = None, query: dict[str, list[str]] | None = None) -> int | None:
     payload = payload or {}
     query = query or {}
     if payload.get("user_id") is not None:
@@ -28,6 +28,13 @@ def resolve_user_id(conn, payload: dict | None = None, query: dict[str, list[str
         row = conn.execute("SELECT id FROM users WHERE lower(name)=lower(?) AND active=1", (user_name,)).fetchone()
         if row:
             return int(row["id"])
+    return None
+
+
+def resolve_user_id(conn, payload: dict | None = None, query: dict[str, list[str]] | None = None) -> int:
+    found = find_user_id(conn, payload, query)
+    if found is not None:
+        return found
     return 1
 
 
@@ -53,6 +60,44 @@ def apply_update(conn, table: str, row_id: int, user_id: int, fields: dict, allo
         values,
     )
     return {"ok": cur.rowcount == 1, "updated": cur.rowcount}
+
+
+def setup_status(conn, payload: dict | None = None, query: dict[str, list[str]] | None = None) -> dict:
+    payload = payload or {}
+    query = query or {}
+    telegram_user_id = payload.get("telegram_user_id") or (query.get("telegram_user_id", [None])[0])
+    user_id = find_user_id(conn, payload, query)
+    if user_id is None:
+        return {
+            "ok": True,
+            "configured": False,
+            "needs_user": True,
+            "telegram_user_id": str(telegram_user_id) if telegram_user_id else None,
+            "missing_profile_fields": ["name", "age", "height_cm", "starting_weight_kg", "goal_weight_kg"],
+            "missing_target_fields": ["calories_kcal", "protein_g"],
+            "prompt": "Ask for name, age, height, current weight, goal weight, activity/training pattern, diet preferences, and whether they already know their calorie/protein targets.",
+        }
+    user = conn.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
+    targets = current_targets(conn, user_id)
+    missing_profile = [
+        field
+        for field in ["age", "height_cm", "starting_weight_kg", "goal_weight_kg"]
+        if user[field] in (None, "")
+    ]
+    missing_targets = [
+        field
+        for field in ["calories_kcal", "protein_g", "fibre_g", "water_l", "steps"]
+        if targets.get(field) in (None, "")
+    ]
+    return {
+        "ok": True,
+        "configured": not missing_profile and not missing_targets,
+        "needs_user": False,
+        "user": dict(user),
+        "targets": targets,
+        "missing_profile_fields": missing_profile,
+        "missing_target_fields": missing_targets,
+    }
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -147,6 +192,10 @@ class Handler(BaseHTTPRequestHandler):
             self.reply(403, "forbidden")
             return
         init_db()
+        if parsed.path == "/setup-status":
+            with connect() as conn:
+                self.reply_json(setup_status(conn, query=query))
+            return
         send = query.get("send", ["0"])[0] == "1"
         if parsed.path == "/morning-plan":
             with connect() as conn:
@@ -161,7 +210,9 @@ class Handler(BaseHTTPRequestHandler):
                 user_id = resolve_user_id(conn, query=query)
             text = weekly_summary(user_id)
         elif parsed.path == "/check-meal":
-            text = check_meal(query.get("meal", [""])[0], int(query.get("level", ["1"])[0]))
+            with connect() as conn:
+                user_id = resolve_user_id(conn, query=query)
+            text = check_meal(query.get("meal", [""])[0], int(query.get("level", ["1"])[0]), user_id)
             self.reply(200, text)
             return
         else:
@@ -217,6 +268,8 @@ class Handler(BaseHTTPRequestHandler):
                     ),
                 )
                 targets = payload.get("targets", {})
+                existing_targets = current_targets(conn, int(next_id))
+                merged_targets = {**default_targets(load_config()), **existing_targets, **targets}
                 conn.execute(
                     """
                     INSERT INTO daily_targets
@@ -231,13 +284,23 @@ class Handler(BaseHTTPRequestHandler):
                     """,
                     (
                         int(next_id),
-                        targets.get("calories_kcal", 2000),
-                        targets.get("protein_g", 100),
-                        targets.get("fibre_g", 30),
-                        targets.get("water_l", 2.5),
-                        targets.get("steps", 8000),
+                        merged_targets["calories_kcal"],
+                        merged_targets["protein_g"],
+                        merged_targets["fibre_g"],
+                        merged_targets["water_l"],
+                        merged_targets["steps"],
                     ),
                 )
+                for key in ["goal", "activity_level", "diet_preferences"]:
+                    if payload.get(key):
+                        conn.execute(
+                            """
+                            INSERT INTO app_settings (key, value)
+                            VALUES (?, ?)
+                            ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=CURRENT_TIMESTAMP
+                            """,
+                            (f"preference.{int(next_id)}.{key}", str(payload[key])),
+                        )
                 self.reply_json({"ok": True, "user_id": int(next_id)})
                 return
             user_id = resolve_user_id(conn, payload, query)

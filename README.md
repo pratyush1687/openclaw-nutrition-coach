@@ -11,9 +11,10 @@ The plugin contains:
 
 ## What It Does
 
-- Sends a personalized morning plan at 08:00 Asia/Kolkata.
+- Sends a personalized morning plan at 08:00 in the configured timezone.
 - Tracks calories, protein, carbs, fat, fibre, water, steps, weight, and workouts.
 - Supports correction tools for existing meal, weight, water, step, and workout logs.
+- Runs an initial setup stage for each user before regular coaching.
 - Sends meal-window accountability reminders without duplicate messages when meals are already logged or skipped.
 - Sends an evening scorecard and weekly 7-day adherence summary.
 - Supports household-aware users with shared foods and separate personal ledgers.
@@ -32,6 +33,70 @@ TELEGRAM_CHAT_ID=<telegram chat id>
 ```
 
 Do not commit `.env`, SQLite databases, backups, Telegram tokens, OpenClaw gateway tokens, or auth profiles.
+
+## Per-User Configuration
+
+Configure household members in `backend/config/coach.yaml` under `users`. Each user can have separate targets, demographics, timezone, Telegram identity, and preferences:
+
+```yaml
+timezone: Asia/Kolkata
+
+defaults:
+  targets:
+    calories_kcal: 2000
+    protein_g: 100
+    fibre_g: 30
+    water_l: 2.5
+    steps: 8000
+
+users:
+  - id: 1
+    name: Primary User
+    role: primary
+    telegram_user_id: "123456789"
+    timezone: Asia/Kolkata
+    targets:
+      calories_kcal: 2000
+      protein_g: 100
+      fibre_g: 35
+      water_l: 3
+      steps: 8000
+    preferences:
+      diet: vegetarian plus eggs
+
+  - id: 2
+    name: Household Member
+    role: member
+    telegram_user_id: "987654321"
+    targets:
+      calories_kcal: 1800
+      protein_g: 90
+```
+
+The backend also supports the older single-user `user` plus `targets` config shape, but new installs should use `users`.
+
+All MCP tools accept `user_id`, `user_name`, or `telegram_user_id`. Scheduled jobs should include the intended identity, for example:
+
+```bash
+curl -fsS "http://nutrition-jobs:8080/morning-plan?user_id=1&send=1&token=${NUTRITION_JOB_TOKEN}"
+curl -fsS "http://nutrition-jobs:8080/check-meal?user_id=2&meal=lunch&level=1&token=${NUTRITION_JOB_TOKEN}"
+```
+
+## Initial Setup Flow
+
+OpenClaw should call `setup_status` when a new Telegram sender appears or when profile data may be incomplete. If setup is incomplete, the coach asks for:
+
+- name
+- age
+- height
+- current weight
+- goal weight
+- primary goal
+- activity/training pattern
+- diet preferences or restrictions
+- known calorie/protein targets, if any
+
+OpenClaw then saves the answers with `upsert_user`. If calorie/protein targets are unknown, use configurable defaults first and adjust after real logs and weight trend data accumulate.
 
 ## Backend Install
 
@@ -60,6 +125,7 @@ Configure OpenClaw to launch `node ./mcp/nutrition_mcp.mjs` with `NUTRITION_API_
 The MCP tools include:
 
 - `get_today`
+- `setup_status`
 - `get_logs`
 - `log_meal`
 - `update_meal`
@@ -87,6 +153,8 @@ Use OpenClaw automations for:
 - Meal-window checks.
 - Evening scorecard.
 - Weekly summary.
+
+The automation manifest generator creates those jobs for every configured user in `users`.
 
 Meal-window checks should run as silent command jobs calling `/check-meal`, because that endpoint directly sends Telegram only when a reminder is needed and returns no output for quiet runs.
 

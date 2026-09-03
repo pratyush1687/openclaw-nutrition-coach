@@ -158,57 +158,67 @@ CREATE TABLE IF NOT EXISTS app_settings (
 
 
 def init_db(config: dict | None = None) -> None:
-    from app.config import load_config
+    from app.config import configured_users, default_targets, load_config
 
     cfg = config or load_config()
     with connect() as conn:
         conn.executescript(SCHEMA)
         migrate(conn)
-        user = cfg.get("user", {})
-        tz = cfg.get("timezone", "Asia/Kolkata")
-        conn.execute(
-            """
-            INSERT INTO users (id, name, timezone, age, sex, height_cm, starting_weight_kg, goal_weight_kg, role)
-            VALUES (1, ?, ?, ?, ?, ?, ?, ?, 'primary')
-            ON CONFLICT(id) DO UPDATE SET
-              name=excluded.name, timezone=excluded.timezone, age=excluded.age, sex=excluded.sex,
-              height_cm=excluded.height_cm, starting_weight_kg=excluded.starting_weight_kg,
-              goal_weight_kg=excluded.goal_weight_kg
-            """,
-            (
-                user.get("name", "Pratyush"),
-                tz,
-                user.get("age"),
-                user.get("sex"),
-                user.get("height_cm"),
-                user.get("starting_weight_kg"),
-                user.get("goal_weight_kg"),
-            ),
-        )
         conn.execute(
             """
             INSERT INTO users (id, name, timezone, role)
             VALUES (0, 'Household', ?, 'household')
             ON CONFLICT(id) DO UPDATE SET name=excluded.name, timezone=excluded.timezone, role=excluded.role
             """,
-            (tz,),
+            (cfg.get("timezone", "Asia/Kolkata"),),
         )
-        targets = cfg.get("targets", {})
-        conn.execute(
-            """
+        fallback_targets = default_targets(cfg)
+        for user in configured_users(cfg):
+            user_id = int(user.get("id", 1))
+            tz = user.get("timezone") or cfg.get("timezone", "Asia/Kolkata")
+            role = user.get("role", "primary" if user_id == 1 else "member")
+            conn.execute(
+                """
+            INSERT INTO users (id, name, timezone, age, sex, height_cm, starting_weight_kg, goal_weight_kg, telegram_user_id, role, active)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+            ON CONFLICT(id) DO UPDATE SET
+              name=excluded.name, timezone=excluded.timezone, age=excluded.age, sex=excluded.sex,
+              height_cm=excluded.height_cm, starting_weight_kg=excluded.starting_weight_kg,
+              goal_weight_kg=excluded.goal_weight_kg,
+              telegram_user_id=COALESCE(excluded.telegram_user_id, users.telegram_user_id),
+              role=excluded.role,
+              active=1
+                """,
+                (
+                    user_id,
+                    user.get("name", f"User {user_id}"),
+                    tz,
+                    user.get("age"),
+                    user.get("sex"),
+                    user.get("height_cm"),
+                    user.get("starting_weight_kg"),
+                    user.get("goal_weight_kg"),
+                    str(user["telegram_user_id"]) if user.get("telegram_user_id") is not None else None,
+                    role,
+                ),
+            )
+            targets = {**fallback_targets, **(user.get("targets", {}) or {})}
+            conn.execute(
+                """
             INSERT INTO daily_targets
               (user_id, effective_date, calories_kcal, protein_g, fibre_g, water_l, steps)
-            VALUES (1, date('now'), ?, ?, ?, ?, ?)
+            VALUES (?, date('now'), ?, ?, ?, ?, ?)
             ON CONFLICT(user_id, effective_date) DO NOTHING
-            """,
-            (
-                targets.get("calories_kcal", 2400),
-                targets.get("protein_g", 160),
-                targets.get("fibre_g", 35),
-                targets.get("water_l", 3),
-                targets.get("steps", 8000),
-            ),
-        )
+                """,
+                (
+                    user_id,
+                    targets["calories_kcal"],
+                    targets["protein_g"],
+                    targets["fibre_g"],
+                    targets["water_l"],
+                    targets["steps"],
+                ),
+            )
 
 
 def migrate(conn: sqlite3.Connection) -> None:

@@ -62,6 +62,7 @@ function userQuery(args) {
 }
 
 server.tool("get_today", "Read today's nutrition totals and targets for one user.", userFields, async (args) => asText(await get(`/today${userQuery(args)}`)));
+server.tool("setup_status", "Check whether a Telegram sender or user has completed initial nutrition profile setup.", userFields, async (args) => asText(await get(`/setup-status${userQuery(args)}`)));
 server.tool(
   "get_logs",
   "Read recent meal, weight, water, steps, or workout logs with ids so a previous entry can be corrected.",
@@ -91,6 +92,9 @@ server.tool(
     height_cm: z.number().optional(),
     starting_weight_kg: z.number().optional(),
     goal_weight_kg: z.number().optional(),
+    activity_level: z.string().optional(),
+    goal: z.string().optional(),
+    diet_preferences: z.string().optional(),
     role: z.string().optional().default("member"),
     timezone: z.string().optional().default("Asia/Kolkata"),
     targets: z.object({

@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from app.config import load_config
+from app.config import default_targets, load_config
 from app.database import connect, init_db
 
 
@@ -23,14 +23,14 @@ def current_targets(conn, user_id: int = 1) -> dict:
     ).fetchone()
     if row is None:
         cfg = load_config()
-        targets = cfg.get("targets", {})
+        targets = default_targets(cfg)
         return {
             "user_id": user_id,
-            "calories_kcal": targets.get("calories_kcal", 2300),
-            "protein_g": targets.get("protein_g", 150),
-            "fibre_g": targets.get("fibre_g", 35),
-            "water_l": targets.get("water_l", 3),
-            "steps": targets.get("steps", 8000),
+            "calories_kcal": targets["calories_kcal"],
+            "protein_g": targets["protein_g"],
+            "fibre_g": targets["fibre_g"],
+            "water_l": targets["water_l"],
+            "steps": targets["steps"],
         }
     return dict(row)
 

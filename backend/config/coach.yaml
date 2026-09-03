@@ -1,34 +1,62 @@
 timezone: Asia/Kolkata
-user:
-  name: Pratyush
-  age: 28
-  sex: male
-  height_cm: 183
-  starting_weight_kg: 118
-  goal_weight_kg: 83
-targets:
-  calories_kcal: 2300
-  protein_g: 150
-  fibre_g: 35
-  water_l: 3
-  steps: 8000
-preferences:
-  diet: eggitarian vegetarian plus eggs
-  prefer:
-    - egg whites
-    - tofu
-    - soy
-    - low-fat curd
-    - Greek yogurt
-    - dals
-    - legumes
-    - vegetables
-    - fruits
-  limit:
-    - butter
-    - ghee
-    - high-fat paneer
-    - saturated fat
+
+defaults:
+  targets:
+    calories_kcal: 2000
+    protein_g: 100
+    fibre_g: 30
+    water_l: 2.5
+    steps: 8000
+  preferences:
+    diet: balanced
+    prefer:
+      - lean protein
+      - vegetables
+      - fruit
+      - minimally processed staples
+    limit:
+      - ultra-processed snacks
+      - high saturated fat
+
+users:
+  - id: 1
+    name: Primary User
+    role: primary
+    timezone: Asia/Kolkata
+    telegram_user_id:
+    age:
+    sex:
+    height_cm:
+    starting_weight_kg:
+    goal_weight_kg:
+    targets:
+      calories_kcal: 2000
+      protein_g: 100
+      fibre_g: 30
+      water_l: 2.5
+      steps: 8000
+    preferences:
+      diet: balanced
+      prefer:
+        - lean protein
+        - vegetables
+        - fruit
+      limit:
+        - ultra-processed snacks
+
+  - id: 2
+    name: Household Member
+    role: member
+    timezone: Asia/Kolkata
+    telegram_user_id:
+    targets:
+      calories_kcal: 1800
+      protein_g: 90
+      fibre_g: 28
+      water_l: 2.3
+      steps: 8000
+    preferences:
+      diet: balanced
 meal_windows:
   breakfast:
     start: "08:00"
