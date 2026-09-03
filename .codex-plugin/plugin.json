@@ -1,0 +1,41 @@
+{
+  "name": "openclaw-nutrition-coach",
+  "version": "0.1.0",
+  "description": "OpenClaw nutrition coach with Telegram meal logging, scheduled reminders, macro tracking, and a private MCP-backed ledger.",
+  "author": {
+    "name": "Pratyush Goel",
+    "url": "https://github.com/pratyush1687"
+  },
+  "homepage": "https://github.com/pratyush1687/openclaw-nutrition-coach",
+  "repository": "https://github.com/pratyush1687/openclaw-nutrition-coach",
+  "license": "MIT",
+  "keywords": [
+    "openclaw",
+    "telegram",
+    "nutrition",
+    "mcp",
+    "health"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "OpenClaw Nutrition Coach",
+    "shortDescription": "Telegram nutrition coach with MCP-backed meal, macro, water, step, and weight logs.",
+    "longDescription": "A self-hosted OpenClaw nutrition coach plugin. It includes a nutrition-coach skill, a Node MCP server, and a Dockerized private backend for food logs, macros, targets, reminders, scorecards, and household-aware preferences.",
+    "developerName": "Pratyush Goel",
+    "category": "Health",
+    "capabilities": [
+      "MCP",
+      "Skills",
+      "Telegram",
+      "Scheduled"
+    ],
+    "websiteURL": "https://github.com/pratyush1687/openclaw-nutrition-coach",
+    "defaultPrompt": [
+      "Log this meal and update my macros.",
+      "Correct my last lunch entry.",
+      "Show today's nutrition status."
+    ],
+    "brandColor": "#2563EB"
+  }
+}

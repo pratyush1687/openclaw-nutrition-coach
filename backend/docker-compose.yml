@@ -1,0 +1,33 @@
+services:
+  nutrition-coach:
+    build: .
+    profiles: ["legacy-bot"]
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./config:/app/config:ro
+      - ./data:/app/data
+      - ./backups:/app/backups
+    healthcheck:
+      test: ["CMD", "python", "-m", "app.cli", "health", "--quiet"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+  nutrition-jobs:
+    build: .
+    restart: unless-stopped
+    env_file:
+      - .env
+    command: ["python", "-m", "app.jobs_api"]
+    volumes:
+      - ./config:/app/config:ro
+      - ./data:/app/data
+      - ./backups:/app/backups
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 10s

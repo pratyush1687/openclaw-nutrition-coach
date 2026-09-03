@@ -1,0 +1,60 @@
+timezone: Asia/Kolkata
+user:
+  name: Pratyush
+  age: 28
+  sex: male
+  height_cm: 183
+  starting_weight_kg: 118
+  goal_weight_kg: 83
+targets:
+  calories_kcal: 2300
+  protein_g: 150
+  fibre_g: 35
+  water_l: 3
+  steps: 8000
+preferences:
+  diet: eggitarian vegetarian plus eggs
+  prefer:
+    - egg whites
+    - tofu
+    - soy
+    - low-fat curd
+    - Greek yogurt
+    - dals
+    - legumes
+    - vegetables
+    - fruits
+  limit:
+    - butter
+    - ghee
+    - high-fat paneer
+    - saturated fat
+meal_windows:
+  breakfast:
+    start: "08:00"
+    end: "10:30"
+    reminders: ["10:30", "11:00", "11:30"]
+  lunch:
+    start: "12:30"
+    end: "14:30"
+    reminders: ["13:30", "14:00", "14:30"]
+  snack:
+    start: "16:30"
+    end: "18:30"
+    reminders: ["17:30", "18:00", "18:30"]
+  dinner:
+    start: "19:30"
+    end: "22:00"
+    reminders: ["21:00", "21:30", "22:00"]
+coach:
+  tone: concise, direct, slightly cheeky, firm, encouraging, non-judgmental
+  morning_goal: Hit protein early so dinner does not become a rescue mission.
+  guardrails:
+    - Never shame food choices or body weight.
+    - Never recommend starvation, purging, dehydration, or extreme compensation.
+    - If yesterday was high calorie, resume the normal target unless a safe deliberate adjustment is configured.
+    - If weight loss is progressing appropriately, do not keep reducing calories.
+schedule:
+  morning_plan: "0 8 * * *"
+  evening_scorecard: "30 22 * * *"
+  weekly_summary: "0 9 * * 0"

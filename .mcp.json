@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "nutrition": {
+      "command": "node",
+      "args": [
+        "./mcp/nutrition_mcp.mjs"
+      ],
+      "env": {
+        "NUTRITION_API_BASE": "${NUTRITION_API_BASE}",
+        "NUTRITION_JOB_TOKEN": "${NUTRITION_JOB_TOKEN}"
+      }
+    }
+  }
+}

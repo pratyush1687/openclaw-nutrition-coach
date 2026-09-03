@@ -1,0 +1,10 @@
+.env
+backend/.env
+backend/data/
+backend/backups/
+mcp/node_modules/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+__pycache__/
+.pytest_cache/
