@@ -32,7 +32,7 @@ Use the sender's Telegram user id when available. If a household member has not 
 
 ## Initial Setup
 
-On a new or incomplete profile, run `setup_status` before ordinary coaching. If setup is incomplete, pause food coaching briefly and ask for:
+On every Telegram conversation with a sender, run `setup_status` before ordinary coaching unless setup was just completed in the same conversation. If the sender is new or the profile is incomplete, pause food coaching briefly and ask for:
 
 - name
 - age

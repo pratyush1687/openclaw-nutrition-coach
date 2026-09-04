@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.config import configured_users, load_config
+from app.config import load_config
 from app.database import connect, init_db
 from app.nutrition.coach import today
 from app.telegram.client import send_message
@@ -20,6 +20,11 @@ def meal_logged(conn, meal: str, date_text: str, user_id: int) -> bool:
         (user_id, meal, date_text),
     ).fetchone()
     return row is not None
+
+
+def user_chat_id(conn, user_id: int) -> str | None:
+    row = conn.execute("SELECT telegram_user_id FROM users WHERE id=? AND active=1", (user_id,)).fetchone()
+    return str(row["telegram_user_id"]) if row and row["telegram_user_id"] else None
 
 
 def check_meal(meal: str, level: int, user_id: int = 1) -> str:
@@ -45,8 +50,9 @@ def check_meal(meal: str, level: int, user_id: int = 1) -> str:
             """,
             (user_id, date_text, meal, level),
         )
+        chat_id = user_chat_id(conn, user_id)
     text = MESSAGES.get(level, MESSAGES[3]).format(meal=meal)
-    sent = send_message(text)
+    sent = send_message(text, chat_id=chat_id)
     if level >= 3:
         maybe_call(f"You have not logged {meal}. Tell me what you ate, or log it on Telegram.")
     return text if sent else "NO_REPLY"
@@ -54,37 +60,31 @@ def check_meal(meal: str, level: int, user_id: int = 1) -> str:
 
 def install_manifest() -> list[dict]:
     cfg = load_config()
-    jobs = []
-    for user in configured_users(cfg):
-        user_id = int(user.get("id", 1))
-        slug = str(user.get("name", f"user-{user_id}")).strip().lower().replace(" ", "-")
-        jobs.extend(
-            [
+    jobs = [
+        {
+            "name": "nutrition-morning-plan-all",
+            "schedule": cfg["schedule"]["morning_plan"],
+            "command": "curl -fsS \"http://nutrition-jobs:8080/morning-plan-all?send=1&token=${NUTRITION_JOB_TOKEN}\"",
+        },
+        {
+            "name": "nutrition-evening-scorecard-all",
+            "schedule": cfg["schedule"]["evening_scorecard"],
+            "command": "curl -fsS \"http://nutrition-jobs:8080/scorecard-all?send=1&token=${NUTRITION_JOB_TOKEN}\"",
+        },
+        {
+            "name": "nutrition-weekly-summary-all",
+            "schedule": cfg["schedule"]["weekly_summary"],
+            "command": "curl -fsS \"http://nutrition-jobs:8080/weekly-all?send=1&token=${NUTRITION_JOB_TOKEN}\"",
+        },
+    ]
+    for meal, spec in cfg["meal_windows"].items():
+        for idx, when in enumerate(spec["reminders"], start=1):
+            minute, hour = when.split(":")[1], when.split(":")[0]
+            jobs.append(
                 {
-                    "name": f"nutrition-{slug}-morning-plan",
-                    "schedule": cfg["schedule"]["morning_plan"],
-                    "command": f"curl -fsS \"http://nutrition-jobs:8080/morning-plan?user_id={user_id}&send=1&token=${{NUTRITION_JOB_TOKEN}}\"",
-                },
-                {
-                    "name": f"nutrition-{slug}-evening-scorecard",
-                    "schedule": cfg["schedule"]["evening_scorecard"],
-                    "command": f"curl -fsS \"http://nutrition-jobs:8080/scorecard?user_id={user_id}&send=1&token=${{NUTRITION_JOB_TOKEN}}\"",
-                },
-                {
-                    "name": f"nutrition-{slug}-weekly-summary",
-                    "schedule": cfg["schedule"]["weekly_summary"],
-                    "command": f"curl -fsS \"http://nutrition-jobs:8080/weekly?user_id={user_id}&send=1&token=${{NUTRITION_JOB_TOKEN}}\"",
-                },
-            ]
-        )
-        for meal, spec in cfg["meal_windows"].items():
-            for idx, when in enumerate(spec["reminders"], start=1):
-                minute, hour = when.split(":")[1], when.split(":")[0]
-                jobs.append(
-                    {
-                        "name": f"nutrition-{slug}-{meal}-reminder-{idx}",
-                        "schedule": f"{int(minute)} {int(hour)} * * *",
-                        "command": f"curl -fsS \"http://nutrition-jobs:8080/check-meal?user_id={user_id}&meal={meal}&level={idx}&token=${{NUTRITION_JOB_TOKEN}}\"",
-                    }
-                )
+                    "name": f"nutrition-{meal}-reminder-{idx}-all",
+                    "schedule": f"{int(minute)} {int(hour)} * * *",
+                    "command": f"curl -fsS \"http://nutrition-jobs:8080/check-meal?meal={meal}&level={idx}&token=${{NUTRITION_JOB_TOKEN}}\"",
+                }
+            )
     return jobs

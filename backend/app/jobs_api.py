@@ -100,6 +100,20 @@ def setup_status(conn, payload: dict | None = None, query: dict[str, list[str]] 
     }
 
 
+def active_users(conn) -> list[dict]:
+    return [
+        dict(row)
+        for row in conn.execute(
+            "SELECT id, name, telegram_user_id FROM users WHERE id > 0 AND active=1 ORDER BY id"
+        ).fetchall()
+    ]
+
+
+def user_chat_id(conn, user_id: int) -> str | None:
+    row = conn.execute("SELECT telegram_user_id FROM users WHERE id=? AND active=1", (user_id,)).fetchone()
+    return str(row["telegram_user_id"]) if row and row["telegram_user_id"] else None
+
+
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
@@ -197,29 +211,67 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply_json(setup_status(conn, query=query))
             return
         send = query.get("send", ["0"])[0] == "1"
+        if parsed.path == "/morning-plan-all":
+            sent = []
+            with connect() as conn:
+                users = active_users(conn)
+            for user in users:
+                text = morning_plan(int(user["id"]))
+                if send and user.get("telegram_user_id"):
+                    send_message(text, chat_id=str(user["telegram_user_id"]))
+                sent.append({"user_id": user["id"], "name": user["name"], "sent": bool(send and user.get("telegram_user_id"))})
+            self.reply_json({"ok": True, "users": sent})
+            return
+        if parsed.path == "/scorecard-all":
+            sent = []
+            with connect() as conn:
+                users = active_users(conn)
+            for user in users:
+                text = scorecard(int(user["id"]))
+                if send and user.get("telegram_user_id"):
+                    send_message(text, chat_id=str(user["telegram_user_id"]))
+                sent.append({"user_id": user["id"], "name": user["name"], "sent": bool(send and user.get("telegram_user_id"))})
+            self.reply_json({"ok": True, "users": sent})
+            return
+        if parsed.path == "/weekly-all":
+            sent = []
+            with connect() as conn:
+                users = active_users(conn)
+            for user in users:
+                text = weekly_summary(int(user["id"]))
+                if send and user.get("telegram_user_id"):
+                    send_message(text, chat_id=str(user["telegram_user_id"]))
+                sent.append({"user_id": user["id"], "name": user["name"], "sent": bool(send and user.get("telegram_user_id"))})
+            self.reply_json({"ok": True, "users": sent})
+            return
         if parsed.path == "/morning-plan":
             with connect() as conn:
                 user_id = resolve_user_id(conn, query=query)
+                chat_id = user_chat_id(conn, user_id)
             text = morning_plan(user_id)
         elif parsed.path == "/scorecard":
             with connect() as conn:
                 user_id = resolve_user_id(conn, query=query)
+                chat_id = user_chat_id(conn, user_id)
             text = scorecard(user_id)
         elif parsed.path == "/weekly":
             with connect() as conn:
                 user_id = resolve_user_id(conn, query=query)
+                chat_id = user_chat_id(conn, user_id)
             text = weekly_summary(user_id)
         elif parsed.path == "/check-meal":
             with connect() as conn:
-                user_id = resolve_user_id(conn, query=query)
-            text = check_meal(query.get("meal", [""])[0], int(query.get("level", ["1"])[0]), user_id)
+                maybe_user_id = find_user_id(conn, query=query)
+                user_ids = [maybe_user_id] if maybe_user_id is not None else [int(user["id"]) for user in active_users(conn)]
+            replies = [check_meal(query.get("meal", [""])[0], int(query.get("level", ["1"])[0]), user_id) for user_id in user_ids]
+            text = "\n".join(reply for reply in replies if reply != "NO_REPLY") or "NO_REPLY"
             self.reply(200, text)
             return
         else:
             self.reply(404, "not found")
             return
         if send:
-            send_message(text)
+            send_message(text, chat_id=chat_id)
         self.reply(200, text)
 
     def do_POST(self) -> None:

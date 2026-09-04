@@ -32,6 +32,9 @@ class ConfigUserTests(unittest.TestCase):
         self.assertEqual(users[0]["targets"]["calories_kcal"], 2300)
         self.assertEqual(users[0]["targets"]["protein_g"], 150)
 
+    def test_empty_users_list_disables_bootstrap_users(self):
+        self.assertEqual(configured_users({"users": []}), [])
+
     def test_database_bootstraps_multiple_configured_users(self):
         cfg = {
             "timezone": "Asia/Kolkata",
@@ -62,7 +65,7 @@ class ConfigUserTests(unittest.TestCase):
                 else:
                     os.environ["DATABASE_PATH"] = old_path
 
-    def test_automation_manifest_is_per_user(self):
+    def test_automation_manifest_fans_out_to_active_users(self):
         cfg = """
 timezone: Asia/Kolkata
 defaults:
@@ -97,10 +100,10 @@ schedule:
                 jobs = install_manifest()
                 names = {job["name"] for job in jobs}
                 commands = "\n".join(job["command"] for job in jobs)
-                self.assertIn("nutrition-alpha-morning-plan", names)
-                self.assertIn("nutrition-beta-morning-plan", names)
-                self.assertIn("user_id=1", commands)
-                self.assertIn("user_id=2", commands)
+                self.assertIn("nutrition-morning-plan-all", names)
+                self.assertIn("nutrition-breakfast-reminder-1-all", names)
+                self.assertIn("/morning-plan-all?send=1", commands)
+                self.assertIn("/check-meal?meal=breakfast", commands)
             finally:
                 if old_path is None:
                     os.environ.pop("COACH_CONFIG", None)

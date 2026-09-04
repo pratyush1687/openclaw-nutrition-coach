@@ -29,7 +29,7 @@ def default_targets(cfg: dict[str, Any]) -> dict[str, Any]:
 
 def configured_users(cfg: dict[str, Any]) -> list[dict[str, Any]]:
     users = cfg.get("users")
-    if isinstance(users, list) and users:
+    if isinstance(users, list):
         return users
 
     legacy_user = cfg.get("user", {}) or {}
